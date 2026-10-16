@@ -1,25 +1,64 @@
-import PyPDF2
-import docx
-from typing import Optional
 import io
+import re
+
+import docx
+import pdfplumber
+
 
 class DocumentProcessor:
     """Handle extraction of text from various document formats"""
+
+    _SECTION_HEADING_PATTERN = re.compile(
+        r"^\s*(?P<prefix>(?:(?:ARTICLE|SECTION)\s+[A-Z0-9IVX.-]+|"
+        r"\d+(?:\.\d+)*[.)]?)\s*[-:.)]?\s*)?"
+        r"(?P<heading>INDEMNITY|TERMINATION(?:\s+OF\s+(?:THIS\s+)?AGREEMENT)?|"
+        r"GOVERNING\s+LAW|CONFIDENTIALITY|PAYMENT(?:\s+TERMS?)?)\b"
+        r"(?P<tail>.*)$",
+        re.IGNORECASE,
+    )
     
     @staticmethod
     def extract_text_from_pdf(file_bytes: bytes) -> str:
         """Extract text from PDF file"""
         try:
             pdf_file = io.BytesIO(file_bytes)
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
-            
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-            
-            return text.strip()
+            with pdfplumber.open(pdf_file) as pdf:
+                pages = [page.extract_text() for page in pdf.pages]
+            return "\n".join(page_text for page_text in pages if page_text).strip()
         except Exception as e:
             raise Exception(f"Error extracting text from PDF: {str(e)}")
+
+    @staticmethod
+    def chunk_text(text: str) -> list[str]:
+        """Split contract text at major legal headings, keeping headings with their bodies."""
+        chunks = []
+        current_lines = []
+
+        for line in text.splitlines():
+            match = DocumentProcessor._SECTION_HEADING_PATTERN.match(line)
+            if match:
+                tail = match.group("tail")
+                heading_is_standalone = not tail.strip()
+                heading_has_separator = tail.lstrip().startswith((":", ".", "-", "\u2013"))
+                heading_is_uppercase = match.group("heading").isupper()
+                if (
+                    match.group("prefix")
+                    or heading_is_standalone
+                    or heading_has_separator
+                    or heading_is_uppercase
+                ):
+                    current_chunk = "\n".join(current_lines).strip()
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                    current_lines = [line]
+                    continue
+
+            current_lines.append(line)
+
+        current_chunk = "\n".join(current_lines).strip()
+        if current_chunk:
+            chunks.append(current_chunk)
+        return chunks
     
     @staticmethod
     def extract_text_from_docx(file_bytes: bytes) -> str:

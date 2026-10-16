@@ -1,7 +1,6 @@
 streamlit
 anthropic
 python-dotenv
-PyPDF2
 python-docx
 pandas
 plotly

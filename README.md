@@ -55,7 +55,7 @@ A sophisticated GenAI-powered legal assistant built with **Google Gemini 2.0 Fla
  **Professional PDF Export** for legal consultation  
 
 ### Data Processing
- **Multi-Format Support**: PDF (PyPDF2), DOCX (python-docx), TXT  
+ **Multi-Format Support**: PDF (pdfplumber), DOCX (python-docx), TXT  
  **Comprehensive Data Extraction**: parties, financial amounts, obligations, deliverables, timelines, termination conditions, jurisdiction, IP rights, confidentiality terms  
  **Session-Based Audit Trail** (no data storage for privacy)  
  **English Language Support** (Hindi parsing in development roadmap)  
@@ -64,7 +64,7 @@ A sophisticated GenAI-powered legal assistant built with **Google Gemini 2.0 Fla
 - **LLM**: Claude Sonnet 4 (Anthropic API)
 - **NLP**: Python with spaCy
 - **UI**: Streamlit
-- **Document Processing**: PyPDF2, python-docx
+- **Document Processing**: pdfplumber, python-docx
 - **Report Generation**: ReportLab
 
 
