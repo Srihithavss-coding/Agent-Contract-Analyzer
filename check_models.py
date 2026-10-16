@@ -1,9 +1,14 @@
 import google.generativeai as genai
+import os
+from dotenv import load_dotenv
 
-# Paste your NEW API key here
-API_KEY = "AIzaSyDxGk1JhAqpjwrKqeYqXyygGqdbJaN7pjY"  # Your actual key
+load_dotenv()
 
-genai.configure(api_key=API_KEY)
+api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+if not api_key:
+    raise SystemExit("Set GOOGLE_API_KEY or GEMINI_API_KEY in your local .env file.")
+
+genai.configure(api_key=api_key)
 
 print("\n=== Testing API Key ===\n")
 try:

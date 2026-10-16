@@ -1,7 +1,8 @@
 import streamlit as st
 import os
+import hashlib
+import html
 from dotenv import load_dotenv
-import json
 from datetime import datetime
 import sys
 
@@ -12,6 +13,11 @@ from src.utils.gemini_analyzer import GeminiAnalyzer as ContractAnalyzer
 from src.utils.document_processor import DocumentProcessor
 from src.utils.report_generator import ReportGenerator
 from src.utils.templates import ContractTemplates
+from src.utils.vector_store import (
+    add_text_chunks,
+    get_collection,
+    search_similar_clauses,
+)
 
 # Load environment variables
 load_dotenv()
@@ -83,8 +89,31 @@ if 'analysis_result' not in st.session_state:
     st.session_state.analysis_result = None
 if 'contract_text' not in st.session_state:
     st.session_state.contract_text = None
+if 'contract_chunks' not in st.session_state:
+    st.session_state.contract_chunks = []
+if 'contract_collection_name' not in st.session_state:
+    st.session_state.contract_collection_name = None
+if 'contract_file_digest' not in st.session_state:
+    st.session_state.contract_file_digest = None
+if 'clause_chat_history' not in st.session_state:
+    st.session_state.clause_chat_history = []
 if 'api_key' not in st.session_state:
-    st.session_state.api_key = os.getenv('ANTHROPIC_API_KEY', '')
+    st.session_state.api_key = os.getenv(
+        'GOOGLE_API_KEY',
+        os.getenv('GEMINI_API_KEY', '')
+    )
+
+
+def _get_chunk_heading(chunk):
+    """Get a concise legal heading from a chunk, or use a general label."""
+    first_line = chunk.splitlines()[0].strip() if chunk.splitlines() else ""
+    match = DocumentProcessor._SECTION_HEADING_PATTERN.match(first_line)
+    if match:
+        prefix = match.group("prefix") or ""
+        heading = match.group("heading")
+        if prefix or heading.isupper() or not match.group("tail").strip():
+            return f"{prefix}{heading}".strip()
+    return first_line[:120] if first_line.isupper() else "General contract text"
 
 def main():
     # Header
@@ -164,6 +193,22 @@ def upload_and_analyze_tab():
     )
     
     if uploaded_file is not None:
+        file_bytes = uploaded_file.getvalue()
+        file_digest = hashlib.sha256(
+            uploaded_file.name.encode("utf-8") + b"\0" + file_bytes
+        ).hexdigest()
+        if st.session_state.contract_file_digest != file_digest:
+            st.session_state.contract_file_digest = file_digest
+            st.session_state.contract_text = None
+            st.session_state.contract_chunks = []
+            st.session_state.analysis_result = None
+            st.session_state.clause_chat_history = []
+            st.session_state.contract_collection_name = (
+                f"contract_{file_digest[:24]}"
+                if uploaded_file.name.lower().endswith(".pdf")
+                else None
+            )
+
         # Display file info
         st.success(f"✅ File uploaded: {uploaded_file.name} ({uploaded_file.size / 1024:.2f} KB)")
         
@@ -171,13 +216,41 @@ def upload_and_analyze_tab():
         if st.button("🔍 Extract Text from Document", type="secondary"):
             with st.spinner("Extracting text from document..."):
                 try:
+                    uploaded_file.seek(0)
                     contract_text = DocumentProcessor.process_document(uploaded_file)
                     st.session_state.contract_text = contract_text
+                    chunks = DocumentProcessor.chunk_text(contract_text)
+                    st.session_state.contract_chunks = chunks
+
+                    if (
+                        uploaded_file.name.lower().endswith(".pdf")
+                        and chunks
+                    ):
+                        collection = get_collection(
+                            st.session_state.contract_collection_name
+                        )
+                        if collection.count() == 0:
+                            headings = [_get_chunk_heading(chunk) for chunk in chunks]
+                            add_text_chunks(
+                                chunks,
+                                headings,
+                                uploaded_file.name,
+                                collection,
+                            )
                     
                     # Detect language
                     language = DocumentProcessor.detect_language(contract_text)
                     
                     st.success(f"✅ Text extracted successfully! Detected language: {language.title()}")
+                    if uploaded_file.name.lower().endswith(".pdf"):
+                        if chunks:
+                            st.success(
+                                f"✅ Indexed {len(chunks)} contract sections for clause search."
+                            )
+                        else:
+                            st.warning(
+                                "No searchable text sections were found in this PDF."
+                            )
                     
                     # Show preview
                     with st.expander("📄 View Extracted Text (First 1000 characters)"):
@@ -189,7 +262,7 @@ def upload_and_analyze_tab():
         # Analyze button
         if st.session_state.contract_text and st.button("🤖 Analyze Contract with AI", type="primary"):
             if not st.session_state.api_key:
-                st.error("⚠️ Please enter your Anthropic API key in the sidebar first!")
+                st.error("⚠️ Please enter your Google Gemini API key in the sidebar first!")
                 return
             
             with st.spinner("🔄 Analyzing contract... This may take 1-2 minutes..."):
@@ -202,6 +275,12 @@ def upload_and_analyze_tab():
                         st.session_state.contract_text,
                         contract_type if contract_type != "Auto-detect" else "General"
                     )
+                    analysis_result["structured_risk_assessment"] = (
+                        analyzer.analyze_retrieved_chunks(
+                            st.session_state.contract_chunks
+                            or [st.session_state.contract_text]
+                        )
+                    )
                     
                     st.session_state.analysis_result = analysis_result
                     
@@ -210,6 +289,48 @@ def upload_and_analyze_tab():
                 except Exception as e:
                     st.error(f"❌ Error during analysis: {str(e)}")
                     st.info("Please check your API key and try again.")
+
+        if (
+            uploaded_file.name.lower().endswith(".pdf")
+            and st.session_state.contract_text
+            and st.session_state.contract_collection_name
+        ):
+            st.divider()
+            st.subheader("💬 Ask About a Contract Clause")
+            st.caption(
+                "Ask a question to retrieve the most relevant clauses from this PDF."
+            )
+
+            for chat_entry in st.session_state.clause_chat_history:
+                with st.chat_message("user"):
+                    st.write(chat_entry["question"])
+                with st.chat_message("assistant"):
+                    if not chat_entry["results"]:
+                        st.info("No matching clauses were found in this contract.")
+                    for result in chat_entry["results"]:
+                        st.markdown(f"**{result.get('heading') or 'Contract clause'}**")
+                        st.write(result["text"])
+                        st.caption(
+                            f"Source: {result.get('source') or uploaded_file.name} "
+                            f"· Semantic distance: {result.get('distance', 0):.3f}"
+                        )
+
+            question = st.chat_input(
+                "What is our liability cap?",
+                key="clause_search_question",
+            )
+            if question:
+                try:
+                    collection = get_collection(
+                        st.session_state.contract_collection_name
+                    )
+                    results = search_similar_clauses(question, collection)
+                    st.session_state.clause_chat_history.append(
+                        {"question": question, "results": results}
+                    )
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Clause search failed: {e}")
     
     # Display results if available
     if st.session_state.analysis_result:
@@ -257,6 +378,55 @@ def display_analysis_results(analysis_result):
         st.subheader("Risk Assessment")
         
         risk_assessment = analysis_result.get('risk_assessment', {})
+        structured_risks = analysis_result.get(
+            "structured_risk_assessment",
+            [],
+        )
+        if isinstance(structured_risks, list):
+            st.markdown("### Clause-Level Risk Findings")
+            risk_counts = {
+                level: sum(
+                    1
+                    for item in structured_risks
+                    if isinstance(item, dict) and item.get("risk_level") == level
+                )
+                for level in ("High", "Medium", "Low")
+            }
+            high_col, medium_col, low_col = st.columns(3)
+            high_col.metric("High Risk", risk_counts["High"])
+            medium_col.metric("Medium Risk", risk_counts["Medium"])
+            low_col.metric("Low Risk", risk_counts["Low"])
+
+            if structured_risks:
+                for item in structured_risks:
+                    if not isinstance(item, dict):
+                        continue
+                    risk_level = item.get("risk_level", "Low")
+                    risk_class = {
+                        "High": "risk-high",
+                        "Medium": "risk-medium",
+                        "Low": "risk-low",
+                    }.get(risk_level, "risk-low")
+                    clause_title = html.escape(str(item.get("clause_title", "Clause")))
+                    identified_issue = html.escape(
+                        str(item.get("identified_issue", ""))
+                    )
+                    recommended_action = html.escape(
+                        str(item.get("recommended_action", ""))
+                    )
+                    st.markdown(
+                        f"""<div class="{risk_class}">
+<strong>{clause_title}</strong>
+<span style="float: right;"><strong>{html.escape(str(risk_level))} RISK</strong></span>
+<p><strong>Issue:</strong> {identified_issue}</p>
+<p><strong>Recommended action:</strong> {recommended_action}</p>
+</div>""",
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.info("No clause-level risks were identified in the analyzed sections.")
+
+            st.divider()
         
         if isinstance(risk_assessment, dict):
             # Overall risk score
@@ -488,7 +658,7 @@ def how_to_use_tab():
     ### Getting Started
     
     #### 1. Set Up Your API Key
-    - Get an API key from [Anthropic Console](https://console.anthropic.com/)
+    - Get a Google Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
     - Enter it in the sidebar under "Settings"
     
     #### 2. Upload Your Contract
@@ -509,6 +679,10 @@ def how_to_use_tab():
         - **Obligations**: What you must, can, and cannot do
         - **Unfavorable Clauses**: Problematic terms with alternatives
         - **Export Report**: Download PDF for legal consultation
+
+    #### 5. Ask About PDF Clauses
+    - After extracting a PDF, use the clause chat box to search for relevant sections
+    - Results are retrieved from a local ChromaDB collection for the current contract
     
     ### Features
     
@@ -557,7 +731,7 @@ def how_to_use_tab():
     ### Privacy & Security
     
     - Documents are processed in real-time
-    - No data is permanently stored
+    - Extracted PDF clauses are stored locally in the `chroma_db` directory for semantic search
     - Analysis happens through secure API calls
     - Your contracts remain confidential
     """)
