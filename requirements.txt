@@ -1,0 +1,14 @@
+streamlit
+anthropic
+python-dotenv
+PyPDF2
+python-docx
+pandas
+plotly
+reportlab
+Pillow
+google-generativeai
+pdfplumber
+chromadb
+sentence-transformers
+pydantic
