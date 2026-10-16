@@ -5,6 +5,7 @@ import html
 from dotenv import load_dotenv
 from datetime import datetime
 import sys
+from streamlit.errors import StreamlitSecretNotFoundError
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
@@ -30,56 +31,192 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom application styling
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+
+    :root {
+        --ink: #172033;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --surface: #ffffff;
+        --canvas: #f5f7fb;
+        --brand: #3157d5;
+    }
+    .stApp {
+        background: radial-gradient(ellipse at 10% 0%, #eef2ff 0, transparent 38%),
+                    var(--canvas);
+        color: var(--ink);
+        font-family: 'DM Sans', sans-serif;
+    }
+    [data-testid="stAppViewContainer"] .main .block-container {
+        max-width: 1380px;
+        padding: 2rem 2.25rem 4rem;
+    }
+    h1, h2, h3, h4, .main-header {
+        font-family: 'Manrope', sans-serif !important;
+        letter-spacing: -0.035em;
+        color: var(--ink);
+    }
     .main-header {
-        font-size: 2.5rem;
-        color: #1f2937;
-        font-weight: bold;
-        text-align: center;
-        margin-bottom: 1rem;
+        font-size: clamp(2rem, 4vw, 3.15rem);
+        line-height: 1.12;
+        font-weight: 800;
+        margin: 0 0 .55rem;
     }
     .sub-header {
-        font-size: 1.2rem;
-        color: #6b7280;
-        text-align: center;
-        margin-bottom: 2rem;
+        font-size: 1.08rem;
+        color: var(--muted);
+        margin: 0;
+        max-width: 760px;
+    }
+    .hero-kicker {
+        color: var(--brand);
+        font-size: .76rem;
+        font-weight: 700;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+        margin-bottom: .6rem;
+    }
+    .hero-rule {
+        height: 1px;
+        border: 0;
+        margin: 1.65rem 0 2rem;
+        background: linear-gradient(90deg, #c7d2fe, #e2e8f0 65%, transparent);
+    }
+    [data-testid="stSidebar"] {
+        background: rgba(255, 255, 255, .88);
+        border-right: 1px solid var(--line);
+    }
+    [data-testid="stTabs"] [data-baseweb="tab-list"] {
+        gap: .55rem;
+        border-bottom: 1px solid var(--line);
+    }
+    [data-testid="stTabs"] [data-baseweb="tab"] {
+        height: 3rem;
+        padding: .5rem 1rem;
+        color: var(--muted);
+        font-weight: 600;
+    }
+    [data-testid="stTabs"] [aria-selected="true"] {
+        color: var(--brand);
+    }
+    [data-testid="stFileUploader"], [data-testid="stExpander"] {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+    }
+    .stButton > button, [data-testid="stDownloadButton"] button {
+        border-radius: 10px;
+        font-weight: 700;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .stButton > button:hover, [data-testid="stDownloadButton"] button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 20px rgba(49, 87, 213, .14);
+    }
+    .risk-metric {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+        padding: 1rem 1.15rem;
+        min-height: 104px;
+        box-shadow: 0 5px 20px rgba(23, 32, 51, .045);
+    }
+    .risk-metric-label {
+        color: var(--muted);
+        font-size: .82rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .risk-metric-value {
+        font-family: 'Manrope', sans-serif;
+        font-size: 2rem;
+        line-height: 1.25;
+        font-weight: 800;
+        margin-top: .28rem;
+    }
+    .risk-metric.high { border-top: 4px solid #dc2626; }
+    .risk-metric.high .risk-metric-value { color: #b91c1c; }
+    .risk-metric.medium { border-top: 4px solid #d97706; }
+    .risk-metric.medium .risk-metric-value { color: #b45309; }
+    .risk-metric.low { border-top: 4px solid #059669; }
+    .risk-metric.low .risk-metric-value { color: #047857; }
+    .risk-table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: 0 5px 20px rgba(23, 32, 51, .04);
+        margin-top: 1rem;
+    }
+    table.risk-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: .92rem;
+    }
+    .risk-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: .75rem;
+        letter-spacing: .06em;
+        text-align: left;
+        text-transform: uppercase;
+    }
+    .risk-table th, .risk-table td {
+        padding: .9rem 1rem;
+        border-bottom: 1px solid #edf1f6;
+        vertical-align: top;
+    }
+    .risk-table tr:last-child td { border-bottom: 0; }
+    .risk-badge {
+        display: inline-block;
+        border-radius: 999px;
+        padding: .22rem .62rem;
+        font-size: .74rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .risk-badge.high { color: #991b1b; background: #fee2e2; }
+    .risk-badge.medium { color: #92400e; background: #fef3c7; }
+    .risk-badge.low { color: #065f46; background: #d1fae5; }
+    @media (max-width: 700px) {
+        [data-testid="stAppViewContainer"] .main .block-container {
+            padding: 1.25rem 1rem 3rem;
+        }
     }
     .risk-high {
-        background-color: #fee2e2;
+        background-color: #fff1f2;
+        border: 1px solid #fecdd3;
         border-left: 4px solid #ef4444;
         padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
+        border-radius: 0.85rem;
+        margin: 0.75rem 0;
     }
     .risk-medium {
-        background-color: #fef3c7;
+        background-color: #fffbeb;
+        border: 1px solid #fde68a;
         border-left: 4px solid #f59e0b;
         padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
+        border-radius: 0.85rem;
+        margin: 0.75rem 0;
     }
     .risk-low {
-        background-color: #d1fae5;
+        background-color: #ecfdf5;
+        border: 1px solid #a7f3d0;
         border-left: 4px solid #10b981;
         padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
+        border-radius: 0.85rem;
+        margin: 0.75rem 0;
     }
     .info-box {
         background-color: #eff6ff;
         border-left: 4px solid #3b82f6;
         padding: 1rem;
-        border-radius: 0.5rem;
+        border-radius: 0.85rem;
         margin: 1rem 0;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 2rem;
-    }
-    .stTabs [data-baseweb="tab"] {
-        font-size: 1.1rem;
-        padding: 0.5rem 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -97,11 +234,6 @@ if 'contract_file_digest' not in st.session_state:
     st.session_state.contract_file_digest = None
 if 'clause_chat_history' not in st.session_state:
     st.session_state.clause_chat_history = []
-if 'api_key' not in st.session_state:
-    st.session_state.api_key = os.getenv(
-        'GOOGLE_API_KEY',
-        os.getenv('GEMINI_API_KEY', '')
-    )
 
 
 def _get_chunk_heading(chunk):
@@ -115,25 +247,52 @@ def _get_chunk_heading(chunk):
             return f"{prefix}{heading}".strip()
     return first_line[:120] if first_line.isupper() else "General contract text"
 
+
+def _get_configured_api_key():
+    """Resolve a Gemini key from environment variables or Streamlit secrets."""
+    for key_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        value = os.getenv(key_name, "").strip()
+        if value:
+            return value
+
+    try:
+        for key_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+            value = st.secrets.get(key_name, "")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    except StreamlitSecretNotFoundError:
+        return None
+    return None
+
+
 def main():
     # Header
-    st.markdown('<p class="main-header">📄 Contract Analysis & Risk Assessment Bot</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">AI-powered legal assistant for small and medium businesses</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-kicker">AI-powered contract intelligence</div>'
+        '<div class="main-header">Legal clarity, clause by clause.</div>'
+        '<p class="sub-header">Explore obligations, retrieve the terms that matter, '
+        'and surface contract risks with structured AI analysis.</p>'
+        '<hr class="hero-rule">',
+        unsafe_allow_html=True,
+    )
     
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Settings")
-        
-        # API Key input
-        api_key = st.text_input(
-            "Google Gemini API Key (FREE)",
-            value=st.session_state.api_key,
-            type="password",
-            help="Enter your FREE Google Gemini API key. Get one at https://aistudio.google.com/app/apikey"
-        )
-        
+        api_key = _get_configured_api_key()
         if api_key:
-            st.session_state.api_key = api_key
+            st.success("🔒 API Key Securely Loaded")
+        else:
+            api_key = st.text_input(
+                "Gemini API key",
+                type="password",
+                key="manual_gemini_api_key",
+                help="Used for this session only. Get a key from Google AI Studio.",
+            ).strip()
+            st.caption(
+                "For a persistent setup, configure GEMINI_API_KEY or GOOGLE_API_KEY "
+                "in the environment or Streamlit secrets."
+            )
         
         st.divider()
         
@@ -165,7 +324,7 @@ def main():
     tab1, tab2, tab3 = st.tabs(["📤 Upload & Analyze", "📋 Contract Templates", "ℹ️ How to Use"])
     
     with tab1:
-        upload_and_analyze_tab()
+        upload_and_analyze_tab(api_key)
     
     with tab2:
         templates_tab()
@@ -173,7 +332,7 @@ def main():
     with tab3:
         how_to_use_tab()
 
-def upload_and_analyze_tab():
+def upload_and_analyze_tab(api_key):
     """Tab for uploading and analyzing contracts"""
     
     st.header("Upload Your Contract")
@@ -261,14 +420,14 @@ def upload_and_analyze_tab():
         
         # Analyze button
         if st.session_state.contract_text and st.button("🤖 Analyze Contract with AI", type="primary"):
-            if not st.session_state.api_key:
+            if not api_key:
                 st.error("⚠️ Please enter your Google Gemini API key in the sidebar first!")
                 return
             
             with st.spinner("🔄 Analyzing contract... This may take 1-2 minutes..."):
                 try:
                     # Initialize analyzer
-                    analyzer = ContractAnalyzer(st.session_state.api_key)
+                    analyzer = ContractAnalyzer(api_key)
                     
                     # Perform analysis
                     analysis_result = analyzer.analyze_contract(
@@ -393,34 +552,46 @@ def display_analysis_results(analysis_result):
                 for level in ("High", "Medium", "Low")
             }
             high_col, medium_col, low_col = st.columns(3)
-            high_col.metric("High Risk", risk_counts["High"])
-            medium_col.metric("Medium Risk", risk_counts["Medium"])
-            low_col.metric("Low Risk", risk_counts["Low"])
+            for column, level, style in (
+                (high_col, "High", "high"),
+                (medium_col, "Medium", "medium"),
+                (low_col, "Low", "low"),
+            ):
+                column.markdown(
+                    f"""<div class="risk-metric {style}">
+<div class="risk-metric-label">{level} Risk</div>
+<div class="risk-metric-value">{risk_counts[level]}</div>
+</div>""",
+                    unsafe_allow_html=True,
+                )
 
             if structured_risks:
+                table_rows = []
                 for item in structured_risks:
                     if not isinstance(item, dict):
                         continue
                     risk_level = item.get("risk_level", "Low")
-                    risk_class = {
-                        "High": "risk-high",
-                        "Medium": "risk-medium",
-                        "Low": "risk-low",
-                    }.get(risk_level, "risk-low")
-                    clause_title = html.escape(str(item.get("clause_title", "Clause")))
-                    identified_issue = html.escape(
-                        str(item.get("identified_issue", ""))
+                    risk_style = {
+                        "High": "high",
+                        "Medium": "medium",
+                        "Low": "low",
+                    }.get(risk_level, "low")
+                    table_rows.append(
+                        "<tr>"
+                        f"<td>{html.escape(str(item.get('clause_title', 'Clause')))}</td>"
+                        f'<td><span class="risk-badge {risk_style}">'
+                        f"{html.escape(str(risk_level))}</span></td>"
+                        f"<td>{html.escape(str(item.get('identified_issue', '')))}</td>"
+                        f"<td>{html.escape(str(item.get('recommended_action', '')))}</td>"
+                        "</tr>"
                     )
-                    recommended_action = html.escape(
-                        str(item.get("recommended_action", ""))
-                    )
+                if table_rows:
                     st.markdown(
-                        f"""<div class="{risk_class}">
-<strong>{clause_title}</strong>
-<span style="float: right;"><strong>{html.escape(str(risk_level))} RISK</strong></span>
-<p><strong>Issue:</strong> {identified_issue}</p>
-<p><strong>Recommended action:</strong> {recommended_action}</p>
-</div>""",
+                        '<div class="risk-table-wrap"><table class="risk-table">'
+                        "<thead><tr><th>Clause</th><th>Risk</th><th>Identified issue</th>"
+                        "<th>Recommended action</th></tr></thead><tbody>"
+                        + "".join(table_rows)
+                        + "</tbody></table></div>",
                         unsafe_allow_html=True,
                     )
             else:
