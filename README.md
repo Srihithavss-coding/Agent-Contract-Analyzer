@@ -130,12 +130,12 @@ The service listens on `http://127.0.0.1:8000` by default. Visit `http://127.0.0
 ### 1. Document Extraction 
 The application parses complex PDF contracts, cleanly breaking them down by legal boundaries (Duties, Compensation, Termination, Liability, Safety) and indexing them with metadata.
 
-![Document Extraction View](images/extraction-view.png)
+![Document Extraction View](images/extraction.png)
 
 ### 2. Risk Assessment Dashboard
 An interactive Streamlit dashboard powered by Pydantic-validated risk cards that automatically flag commercial risks, liabilities, and missing clauses.
 
-![Risk Assessment Dashboard](images/risk-dashboard.png)
+![Risk Assessment Dashboard](images/risk_assessment.png)
 
 
 **Index a contract**
