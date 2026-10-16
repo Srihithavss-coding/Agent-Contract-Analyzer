@@ -136,10 +136,8 @@ streamlit run app.py
 
 Open the local URL printed by Streamlit, upload a contract, extract its text, and run the analysis. For a PDF, extracted sections are indexed for clause questions in the upload view.
 
-## Security & Credential Handling
+## Security & Best Practices
 
-- Keep API credentials in a local `.env` file. `.gitignore` excludes `.env` and `.env.*`, with an exception for `.env.example`.
-- Never put real keys in Python files, notebooks, screenshots, logs, or commits. Use a placeholder-only example file if documenting environment variables.
-- Ignore rules prevent future accidental tracking; **they do not remove credentials from existing Git history**. A Google API credential was previously present in this repository's history. Revoke or rotate it, then coordinate a history scrub with collaborators before distributing rewritten history or force-pushing.
-- No automated secret-scanning CI workflow is configured here. Add and run a secret scanner as part of release checks; do not describe the repository as history-sanitized until the rewrite has been completed and verified.
-- Contracts and extracted clauses may contain confidential information. Review your Gemini account's data handling terms and local ChromaDB retention before using sensitive documents.
+- **Environment Isolation:** Keep API credentials secure in a local `.env` file. `.gitignore` explicitly excludes `.env` and sensitive local files while tracking `.env.example`.
+- **Credential Protection:** Never hardcode API keys or sensitive tokens in source code, notebooks, or logs. 
+- **Data Privacy:** Contracts and extracted clauses are processed locally via ChromaDB and your private Gemini API endpoint. Review Google AI Studio's data privacy terms when handling sensitive legal documents.

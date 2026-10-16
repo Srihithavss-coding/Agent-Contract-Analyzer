@@ -11,8 +11,9 @@ class DocumentProcessor:
     _SECTION_HEADING_PATTERN = re.compile(
         r"^\s*(?P<prefix>(?:(?:ARTICLE|SECTION)\s+[A-Z0-9IVX.-]+|"
         r"\d+(?:\.\d+)*[.)]?)\s*[-:.)]?\s*)?"
-        r"(?P<heading>INDEMNITY|TERMINATION(?:\s+OF\s+(?:THIS\s+)?AGREEMENT)?|"
-        r"GOVERNING\s+LAW|CONFIDENTIALITY|PAYMENT(?:\s+TERMS?)?)\b"
+        r"(?P<heading>INDEMNITY|LIMITATION\s+OF\s+LIABILITY|LIABILITY|"
+        r"TERMINATION(?:\s+OF\s+(?:THIS\s+)?AGREEMENT)?|GOVERNING\s+LAW|"
+        r"CONFIDENTIALITY|PAYMENT(?:\s+TERMS?)?)\b"
         r"(?P<tail>.*)$",
         re.IGNORECASE,
     )
