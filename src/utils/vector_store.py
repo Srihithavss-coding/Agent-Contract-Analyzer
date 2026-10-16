@@ -1,5 +1,6 @@
 """Semantic storage and retrieval for contract clauses."""
 
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Sequence
@@ -91,7 +92,7 @@ def search_similar_clauses(
     collection: Collection | None = None,
     top_k: int = DEFAULT_RESULT_COUNT,
 ) -> list[dict[str, Any]]:
-    """Return the most semantically similar clauses, including their metadata."""
+    """Return semantically similar clauses, boosting matching heading keywords."""
     if not query.strip():
         raise ValueError("query must not be empty")
     if top_k < 1:
@@ -99,14 +100,20 @@ def search_similar_clauses(
 
     target_collection = collection if collection is not None else get_collection()
     try:
+        total_count = target_collection.count()
+        if total_count == 0:
+            return []
+        fetch_k = min(top_k * 3, total_count)
+
         # Encode the question into the same vector space as the stored clauses.
         query_embedding = _get_embedding_model().encode(
             query.strip(),
             convert_to_numpy=True,
         ).tolist()
+
         results = target_collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k,
+            n_results=fetch_k,
             include=["documents", "metadatas", "distances"],
         )
 
@@ -115,15 +122,58 @@ def search_similar_clauses(
         metadatas = results["metadatas"][0] if results["metadatas"] else []
         distances = results["distances"][0] if results["distances"] else []
         ids = results["ids"][0] if results["ids"] else []
+
+        if not documents:
+            return []
+
+        keyword_patterns = {
+            "LIABILITY": r"\b(?:liabilit(?:y|ies)|caps?)\b",
+            "SAFETY": r"\b(?:safety|osha)\b",
+            "INDEMNITY": r"\bindemn\w*\b",
+            "TERMINATION": r"\bterminat\w*\b",
+        }
+        target_keywords = {
+            keyword
+            for keyword, pattern in keyword_patterns.items()
+            if re.search(pattern, query, re.IGNORECASE)
+        }
+
+        scored_results = []
+        for index, document in enumerate(documents):
+            meta = metadatas[index] or {}
+            heading = str(meta.get("heading", ""))
+            dist = distances[index]
+
+            score_adjustment = (
+                -0.4
+                if any(
+                    re.search(keyword_patterns[keyword], heading, re.IGNORECASE)
+                    for keyword in target_keywords
+                )
+                else 0.0
+            )
+
+            scored_results.append({
+                "id": ids[index],
+                "heading": meta.get("heading"),
+                "text": document,
+                "source": meta.get("source"),
+                "adjusted_distance": dist + score_adjustment,
+                "original_distance": dist,
+            })
+
+        scored_results.sort(key=lambda x: x["adjusted_distance"])
+
         return [
             {
-                "id": ids[index],
-                "heading": (metadatas[index] or {}).get("heading"),
-                "text": document,
-                "source": (metadatas[index] or {}).get("source"),
-                "distance": distances[index],
+                "id": item["id"],
+                "heading": item["heading"],
+                "text": item["text"],
+                "source": item["source"],
+                "distance": item["original_distance"],
             }
-            for index, document in enumerate(documents)
+            for item in scored_results[:top_k]
         ]
+
     except Exception as exc:
         raise RuntimeError(f"Could not search contract clauses: {exc}") from exc
