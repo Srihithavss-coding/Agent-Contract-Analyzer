@@ -3,6 +3,8 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+
+[![Live Demo](https://img.shields.io/badge/Streamlit-Live%20Demo-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://agent-contract-analyzer-udumae6v7rte4gczpzm6og.streamlit.app/)
 [![RAG](https://img.shields.io/badge/AI-RAG%20%7C%20Gemini-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Vector DB](https://img.shields.io/badge/Vector%20DB-ChromaDB-7B61FF)](https://www.trychroma.com/)
 
