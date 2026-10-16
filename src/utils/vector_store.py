@@ -15,6 +15,15 @@ DEFAULT_COLLECTION_NAME = "contract_clauses"
 DEFAULT_PERSIST_DIRECTORY = Path("./chroma_db")
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 DEFAULT_RESULT_COUNT = 3
+HEADING_KEYWORD_PATTERNS = {
+    "DUTIES": r"\b(?:duti(?:es|y)|obligations?)\b",
+    "COMPENSATION": r"\b(?:compensation|salary|remuneration|payment)\b",
+    "TERM": r"\b(?:term|duration|effective\s+period)\b",
+    "TERMINATION": r"\bterminat\w*\b",
+    "LIABILITY": r"\b(?:liabilit(?:y|ies)|caps?)\b",
+    "SAFETY": r"\b(?:safety|osha)\b",
+    "INDEMNIFICATION": r"\bindemn\w*\b",
+}
 
 
 @lru_cache(maxsize=1)
@@ -92,7 +101,7 @@ def search_similar_clauses(
     collection: Collection | None = None,
     top_k: int = DEFAULT_RESULT_COUNT,
 ) -> list[dict[str, Any]]:
-    """Return semantically similar clauses, boosting matching heading keywords."""
+    """Retrieve a broad semantic candidate pool, then prioritize matching headings."""
     if not query.strip():
         raise ValueError("query must not be empty")
     if top_k < 1:
@@ -126,15 +135,9 @@ def search_similar_clauses(
         if not documents:
             return []
 
-        keyword_patterns = {
-            "LIABILITY": r"\b(?:liabilit(?:y|ies)|caps?)\b",
-            "SAFETY": r"\b(?:safety|osha)\b",
-            "INDEMNITY": r"\bindemn\w*\b",
-            "TERMINATION": r"\bterminat\w*\b",
-        }
         target_keywords = {
             keyword
-            for keyword, pattern in keyword_patterns.items()
+            for keyword, pattern in HEADING_KEYWORD_PATTERNS.items()
             if re.search(pattern, query, re.IGNORECASE)
         }
 
@@ -143,14 +146,9 @@ def search_similar_clauses(
             meta = metadatas[index] or {}
             heading = str(meta.get("heading", ""))
             dist = distances[index]
-
-            score_adjustment = (
-                -0.4
-                if any(
-                    re.search(keyword_patterns[keyword], heading, re.IGNORECASE)
-                    for keyword in target_keywords
-                )
-                else 0.0
+            heading_matches_query = any(
+                re.search(HEADING_KEYWORD_PATTERNS[keyword], heading, re.IGNORECASE)
+                for keyword in target_keywords
             )
 
             scored_results.append({
@@ -158,11 +156,16 @@ def search_similar_clauses(
                 "heading": meta.get("heading"),
                 "text": document,
                 "source": meta.get("source"),
-                "adjusted_distance": dist + score_adjustment,
+                "heading_matches_query": heading_matches_query,
                 "original_distance": dist,
             })
 
-        scored_results.sort(key=lambda x: x["adjusted_distance"])
+        scored_results.sort(
+            key=lambda item: (
+                not item["heading_matches_query"] if target_keywords else False,
+                item["original_distance"],
+            )
+        )
 
         return [
             {

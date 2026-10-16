@@ -1,4 +1,6 @@
 streamlit
+fastapi
+uvicorn
 anthropic
 python-dotenv
 python-docx

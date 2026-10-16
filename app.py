@@ -238,14 +238,7 @@ if 'clause_chat_history' not in st.session_state:
 
 def _get_chunk_heading(chunk):
     """Get a concise legal heading from a chunk, or use a general label."""
-    first_line = chunk.splitlines()[0].strip() if chunk.splitlines() else ""
-    match = DocumentProcessor._SECTION_HEADING_PATTERN.match(first_line)
-    if match:
-        prefix = match.group("prefix") or ""
-        heading = match.group("heading")
-        if prefix or heading.isupper() or not match.group("tail").strip():
-            return f"{prefix}{heading}".strip()
-    return first_line[:120] if first_line.isupper() else "General contract text"
+    return DocumentProcessor.get_chunk_heading(chunk)
 
 
 def _get_configured_api_key():

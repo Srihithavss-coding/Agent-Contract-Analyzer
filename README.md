@@ -1,87 +1,65 @@
-# Legal Contract Analysis & Risk Assessment
+# Production-Grade Gen AI Contract Analyzer
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://agent-contract-analyzer-udumae6v7rte4gczpzm6og.streamlit.app/)
 [![RAG](https://img.shields.io/badge/AI-RAG%20%7C%20Gemini-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Vector DB](https://img.shields.io/badge/Vector%20DB-ChromaDB-7B61FF)](https://www.trychroma.com/)
 
-An AI-assisted contract review application for exploring contract terms, retrieving relevant clauses, and highlighting potential legal and commercial risks. It combines document extraction, semantic retrieval, and LLM-based analysis in a Streamlit interface.
+An AI-assisted contract review application for retrieving relevant clauses, analyzing contract terms, and surfacing legal and commercial risks. It combines a Streamlit user interface, a FastAPI retrieval API, locally generated semantic embeddings, persistent ChromaDB storage, and Gemini-based analysis.
 
 > **Important:** This tool provides informational analysis, not legal advice. Have qualified counsel review important decisions and contract language.
 
-## Project Overview & Architecture
+## Enterprise Architecture
 
-The application uses a retrieval-augmented workflow for PDF clause search. Uploaded PDFs are extracted with `pdfplumber`, split into text sections, embedded locally, and stored in a persistent ChromaDB collection. A user question is embedded with the same model and matched against that contract's stored sections. Separately, Gemini analyzes the contract and produces structured clause-level risk findings validated with Pydantic.
+The application has two entry points: Streamlit for interactive contract review and FastAPI for programmatic clause indexing and retrieval. Both use the shared document-processing and vector-store utilities. Uploaded PDF, DOCX, and TXT documents are extracted and split at recognized legal section headings. PDF sections are embedded locally and stored in a persistent ChromaDB collection. Gemini produces contract analysis and structured risk findings, with Pydantic validation applied to clause-level assessments.
 
 ```mermaid
 flowchart LR
-    A[PDF upload] --> B[pdfplumber extraction]
-    B --> C[Legal heading chunking]
-    C --> D[Sentence-Transformers embeddings]
-    D --> E[Per-contract ChromaDB collection]
-    F[User clause question] --> G[Query embedding]
-    G --> E
-    E --> H[Top 3 relevant sections]
-    B --> I[Gemini contract analysis]
-    C --> I
-    I --> J[Pydantic risk validation]
-    H --> K[Streamlit clause chat]
-    J --> L[Streamlit risk dashboard]
+    A[Streamlit UI] --> B[Document extraction]
+    A --> C[Gemini contract analysis]
+    B --> F[Regex legal-section chunking]
+    D[FastAPI REST API] --> E[DocumentProcessor]
+    E --> F[Regex legal-section chunking]
+    F --> G[Sentence-Transformers embeddings]
+    G --> H[Persistent ChromaDB]
+    I[Clause search query] --> J[Candidate expansion]
+    J --> H
+    H --> K[Heading-metadata reranking]
+    K --> D
+    K --> A
+    C --> L[Pydantic risk validation]
+    L --> M[Risk assessment dashboard]
 ```
 
-The main upload flow also supports DOCX and TXT extraction and the existing contract summary, entity, obligation, unfavorable-clause, and report features. Semantic clause retrieval in ChromaDB is currently exposed for PDF uploads.
+### Advanced RAG Engineering
 
-## Key Features & Enhancements
+- **Legal-aware regex chunking:** A custom, case-insensitive heading pattern recognizes numbered/article/section-style, standalone, separator-delimited, and uppercase section boundaries for **Duties, Compensation, Term, Termination, Liability, Safety, and Indemnification**. It also recognizes Indemnity, Limitation of Liability, Governing Law, Confidentiality, and Payment. A recognized heading stays with its section body; unmatched text is retained rather than discarded.
+- **Hybrid Metadata Boosting Retriever:** Each chunk is stored with `heading` and `source` metadata. For a query, ChromaDB first retrieves an expanded candidate pool of up to `top_k × 3` sections by semantic distance. The retriever then matches query terms to legal-heading metadata and ranks matching headings ahead of general semantic matches within that candidate pool, using vector distance to order candidates within each group. This prevents general text from outranking a matching, specifically headed clause in the candidate set, reducing semantic bleeding—for example, when a query targets Termination or Liability.
+- **Per-contract retrieval:** The Streamlit flow creates a separate persistent collection for each PDF. The API provides `POST /contracts/index` and `POST /clauses/search`; API-created collections are keyed to the indexed contract and reused for subsequent searches.
+- **Local embeddings and persistence:** `Sentence-Transformers` runs `all-MiniLM-L6-v2` locally. ChromaDB persists vectors and metadata under `./chroma_db`; model files may be downloaded the first time the embedding model loads.
 
-- **Robust PDF text extraction:** Uses `pdfplumber` to extract text page by page and skips pages with no extracted text. DOCX and TXT files continue to use their format-specific extractors.
-- **Legal-section chunking:** Splits text at recognized headings for **Indemnity, Termination, Governing Law, Confidentiality, and Payment**, retaining each heading with its section text. Other text is kept in chunks too. *Liability is not currently a dedicated heading boundary; liability language can still be found semantically within indexed text.*
-- **Persistent semantic clause search:** Stores PDF sections and their heading/source metadata in ChromaDB using `all-MiniLM-L6-v2` embeddings. The chat interface retrieves up to three relevant sections for a question. The local database is written under `./chroma_db` relative to the app's working directory.
-- **Structured risk findings:** The Gemini analyzer requests JSON output and validates clause findings against the shared Pydantic `RiskAssessment` model. Accepted risk levels are exactly `High`, `Medium`, and `Low`; malformed or out-of-schema responses raise an error rather than being presented as validated findings.
-- **Review dashboard:** Shows risk-level counts and clause cards with the identified issue and recommended action, alongside the existing full-contract risk and analysis views.
-- **Contract utilities:** Retains contract classification, entity and obligation analysis, plain-language summaries, unfavorable-clause alternatives, template browsing, and PDF report generation.
+## Key Features
 
-### Performance and operational notes
+- **Risk assessment dashboard:** Displays risk-level metrics and clause-level findings with identified issues and recommended actions, alongside contract summaries, entities, obligations, unfavorable clauses, and report generation.
+- **Secure API key handling:** The Streamlit app reads `GEMINI_API_KEY` or `GOOGLE_API_KEY` from the environment or Streamlit secrets. Alternatively, users can enter a key in a password-masked field for the current session. Keys are not stored in contract data or included in API responses. Keep credentials out of source control.
+- **Fallback behavior:** If a Gemini error interrupts the multi-step contract analysis, the current analyzer returns a clearly described structural preview with empty or fallback analysis fields. It is not a substitute for a successful analysis. Clause-level structured findings are Pydantic-validated; an invalid response raises an error and is surfaced by the app instead of being treated as validated output. Retrieval and indexing do not require a Gemini API key.
+- **Document support:** Extracts PDF, DOCX, and TXT documents. Semantic clause search is available for the indexed contract sections.
+- **API health and interactive docs:** FastAPI exposes `GET /health` and publishes its OpenAPI interface at `/docs` while the service is running.
 
-The embedding model is cached after its first load, but initial model loading may take time and require downloading model files. Search latency depends on hardware, database size, and whether the model is already loaded; no sub-second performance target has been benchmarked or guaranteed.
-
-The persistent vector store is useful for local reuse and per-contract retrieval, but it is not configured as a multi-user hosted database or automatic data-retention system. Manage `chroma_db` according to your privacy and retention requirements.
-
-## Tech Stack
+## Technology Stack
 
 | Area | Technologies |
 | --- | --- |
-| User interface | Python, Streamlit |
-| PDF / document extraction | pdfplumber, python-docx |
-| Vector storage and retrieval | ChromaDB |
+| User interface | Streamlit |
+| REST API | FastAPI, Pydantic |
+| Document extraction | pdfplumber, python-docx |
+| Legal-section chunking | Custom Python regular expressions |
 | Embeddings | Sentence-Transformers, `all-MiniLM-L6-v2` |
-| LLM analysis | Google Gemini API (`gemini-2.5-flash`) |
-| Structured validation | Pydantic |
-| Configuration | python-dotenv |
+| Vector storage and retrieval | ChromaDB |
+| Generative analysis | `google.generativeai` (Gemini) |
+| Configuration | python-dotenv, environment variables, Streamlit secrets |
 | Reports and supporting features | ReportLab, pandas, Plotly |
-
-The active Streamlit app uses Gemini. An Anthropic-backed analyzer is also present in `src/utils/analyzer.py`; it is not the app's configured analyzer.
-
-## Folder Structure
-
-```text
-.
-├── app.py
-├── requirements.txt
-├── .gitignore
-├── sample_contracts/
-└── src/
-    └── utils/
-        ├── __init__.py
-        ├── analyzer.py             # Anthropic analyzer and shared RiskAssessment model
-        ├── document_processor.py   # PDF, DOCX, and TXT extraction; legal chunking
-        ├── gemini_analyzer.py      # Active Gemini analysis and Pydantic validation
-        ├── report_generator.py     # PDF report generation
-        ├── templates.py            # Contract template content
-        └── vector_store.py         # Persistent ChromaDB and semantic search
-```
-
-At runtime, the vector database is created in `chroma_db/` under the current working directory. It is generated data and is not part of the source layout.
 
 ## Local Setup & Installation
 
@@ -97,15 +75,15 @@ cd Agent-Contract-Analyzer
 **Windows PowerShell**
 
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
 **macOS / Linux**
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 Python 3.10 or newer is recommended.
@@ -119,7 +97,7 @@ pip install -r requirements.txt
 
 The first embedding-model use may download `all-MiniLM-L6-v2` from Hugging Face.
 
-### 4. Configure the Gemini API key
+### 4. Configure Gemini (for AI contract analysis)
 
 Create a `.env` file in the project root:
 
@@ -127,18 +105,67 @@ Create a `.env` file in the project root:
 GEMINI_API_KEY=your_google_gemini_api_key
 ```
 
-The app also accepts `GOOGLE_API_KEY`. Obtain a key from [Google AI Studio](https://aistudio.google.com/app/apikey). Keep the real value private; do not paste it into source code or commit it.
+The app also accepts `GOOGLE_API_KEY`. Obtain a key from [Google AI Studio](https://aistudio.google.com/app/apikey). Keep the real value private; do not paste it into source code or commit it. The FastAPI clause-indexing and search endpoints do not require a Gemini key.
 
-### 5. Run the application
+### 5. Run the Streamlit application
 
 ```bash
 streamlit run app.py
 ```
 
-Open the local URL printed by Streamlit, upload a contract, extract its text, and run the analysis. For a PDF, extracted sections are indexed for clause questions in the upload view.
+Open the local URL printed by Streamlit, upload a contract, extract its text, and run the analysis. For PDF uploads, extracted sections are indexed for clause search.
 
-## Security & Best Practices
+### 6. (Optional) Run the FastAPI service
 
-- **Environment Isolation:** Keep API credentials secure in a local `.env` file. `.gitignore` explicitly excludes `.env` and sensitive local files while tracking `.env.example`.
-- **Credential Protection:** Never hardcode API keys or sensitive tokens in source code, notebooks, or logs. 
-- **Data Privacy:** Contracts and extracted clauses are processed locally via ChromaDB and your private Gemini API endpoint. Review Google AI Studio's data privacy terms when handling sensitive legal documents.
+In a second terminal with the virtual environment activated:
+
+```bash
+uvicorn src.api:app --reload
+```
+
+The service listens on `http://127.0.0.1:8000` by default. Visit `http://127.0.0.1:8000/docs` for the interactive API documentation.
+
+## 📸 Application Previews
+
+### 1. Document Extraction 
+The application parses complex PDF contracts, cleanly breaking them down by legal boundaries (Duties, Compensation, Termination, Liability, Safety) and indexing them with metadata.
+
+![Document Extraction View](images/extraction-view.png)
+
+### 2. Risk Assessment Dashboard
+An interactive Streamlit dashboard powered by Pydantic-validated risk cards that automatically flag commercial risks, liabilities, and missing clauses.
+
+![Risk Assessment Dashboard](images/risk-dashboard.png)
+
+
+**Index a contract**
+
+```http
+POST /contracts/index
+Content-Type: application/json
+
+{
+  "source": "sample-contract.pdf",
+  "text": "Paste the extracted contract text here..."
+}
+```
+
+The response contains a `contract_id` and the number of indexed sections. Use that ID to search:
+
+```http
+POST /clauses/search
+Content-Type: application/json
+
+{
+  "contract_id": "contract_<32-character-hex-id>",
+  "question": "What does the termination clause say?",
+  "top_k": 3
+}
+```
+
+## Operational and Privacy Notes
+
+- The FastAPI development server binds to localhost by default. Do not expose it to an untrusted network without adding authentication, authorization, rate limiting, and TLS at an appropriate deployment boundary.
+- ChromaDB stores generated local data in `./chroma_db`. It is not configured as a multi-user hosted database or automatic data-retention system; manage this directory according to your privacy and retention requirements.
+- Contract text is processed locally for extraction, embeddings, and retrieval. Gemini analysis sends contract content to Google's API; review the applicable data privacy terms before processing sensitive documents.
+- Risk findings are informational, can be incomplete, and should be reviewed by qualified counsel.

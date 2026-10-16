@@ -11,9 +11,11 @@ class DocumentProcessor:
     _SECTION_HEADING_PATTERN = re.compile(
         r"^\s*(?P<prefix>(?:(?:ARTICLE|SECTION)\s+[A-Z0-9IVX.-]+|"
         r"\d+(?:\.\d+)*[.)]?)\s*[-:.)]?\s*)?"
-        r"(?P<heading>INDEMNITY|LIMITATION\s+OF\s+LIABILITY|LIABILITY|"
-        r"TERMINATION(?:\s+OF\s+(?:THIS\s+)?AGREEMENT)?|GOVERNING\s+LAW|"
-        r"CONFIDENTIALITY|PAYMENT(?:\s+TERMS?)?)\b"
+        r"(?P<heading>DUTIES|COMPENSATION|TERMINATION(?:\s+OF\s+"
+        r"(?:THIS\s+)?AGREEMENT)?|TERM(?:\s+OF\s+(?:THIS\s+)?AGREEMENT)?|"
+        r"LIMITATION\s+OF\s+LIABILITY|LIABILITY|SAFETY|"
+        r"INDEMNIFICATION|INDEMNITY|GOVERNING\s+LAW|CONFIDENTIALITY|"
+        r"PAYMENT(?:\s+TERMS?)?)\b"
         r"(?P<tail>.*)$",
         re.IGNORECASE,
     )
@@ -60,6 +62,18 @@ class DocumentProcessor:
         if current_chunk:
             chunks.append(current_chunk)
         return chunks
+
+    @staticmethod
+    def get_chunk_heading(chunk: str) -> str:
+        """Extract the legal heading used as retrieval metadata for a chunk."""
+        first_line = chunk.splitlines()[0].strip() if chunk.splitlines() else ""
+        match = DocumentProcessor._SECTION_HEADING_PATTERN.match(first_line)
+        if match:
+            prefix = match.group("prefix") or ""
+            heading = match.group("heading")
+            if prefix or heading.isupper() or not match.group("tail").strip():
+                return f"{prefix}{heading}".strip()
+        return first_line[:120] if first_line.isupper() else "General contract text"
     
     @staticmethod
     def extract_text_from_docx(file_bytes: bytes) -> str:
